@@ -308,67 +308,73 @@ with tabs[1]:
                     progress_bar.progress(progress)
                     status_text.text(f"Epoch {epoch+1}/{epochs} - Loss: {logs.get('loss', 0):.4f} - Val Loss: {logs.get('val_loss', 0):.4f}")
                 
-                # Train model
-                model, history, X_train, X_test, y_train, y_test, dates_train, dates_test, scalers = train_model(
-                    st.session_state['gauged_data_path'], 
-                    model_params,
-                    update_progress
-                )
-                
-                # Save model and related objects
-                timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-                model_dir = os.path.join("models", "model_" + timestamp)
-                os.makedirs(model_dir, exist_ok=True)
-                
-                # Save model using SavedModel format instead of H5
-                model.save(os.path.join(model_dir, "model"))
-                
-                joblib.dump(scalers, os.path.join(model_dir, "scalers.pkl"))
-                joblib.dump(model_params, os.path.join(model_dir, "model_params.pkl"))
-                
-                # Save training data for evaluation
-                joblib.dump({
-                    'X_train': X_train,
-                    'X_test': X_test,
-                    'y_train': y_train,
-                    'y_test': y_test,
-                    'dates_train': dates_train,
-                    'dates_test': dates_test
-                }, os.path.join(model_dir, "training_data.pkl"))
-                
-                # Save history
-                joblib.dump(history.history, os.path.join(model_dir, "history.pkl"))
-                
-                # Update session state
-                st.session_state['model_dir'] = model_dir
-                st.session_state['model_trained'] = True
-                
-                # Display success message
-                st.markdown("<p class='success-text'>Model trained successfully!</p>", unsafe_allow_html=True)
-                
-                # Plot training history
-                st.markdown("### Training History")
-                fig, ax = plt.subplots(1, 2, figsize=(12, 5))
-                
-                # Plot loss
-                ax[0].plot(history.history['loss'], label='Training Loss')
-                if 'val_loss' in history.history:
-                    ax[0].plot(history.history['val_loss'], label='Validation Loss')
-                ax[0].set_title('Model Loss')
-                ax[0].set_xlabel('Epoch')
-                ax[0].set_ylabel('Loss')
-                ax[0].legend()
-                ax[0].grid(True, alpha=0.3)
-                
-                # Plot learning rate if available
-                if 'lr' in history.history:
-                    ax[1].plot(history.history['lr'], color='green')
-                    ax[1].set_title('Learning Rate')
-                    ax[1].set_xlabel('Epoch')
-                    ax[1].set_ylabel('Learning Rate')
-                    ax[1].grid(True, alpha=0.3)
-                
-                st.pyplot(fig)
+                try:
+                    # Train model
+                    model, history, X_train, X_test, y_train, y_test, dates_train, dates_test, scalers = train_model(
+                        st.session_state['gauged_data_path'], 
+                        model_params,
+                        update_progress
+                    )
+                    
+                    # Save model and related objects
+                    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+                    model_dir = os.path.join("models", "model_" + timestamp)
+                    os.makedirs(model_dir, exist_ok=True)
+                    
+                    # Save model using SavedModel format
+                    model.save(os.path.join(model_dir, "model"))
+                    
+                    # Also save as H5 for compatibility
+                    model.save_weights(os.path.join(model_dir, "model.h5"))
+                    
+                    joblib.dump(scalers, os.path.join(model_dir, "scalers.pkl"))
+                    joblib.dump(model_params, os.path.join(model_dir, "model_params.pkl"))
+                    
+                    # Save training data for evaluation
+                    joblib.dump({
+                        'X_train': X_train,
+                        'X_test': X_test,
+                        'y_train': y_train,
+                        'y_test': y_test,
+                        'dates_train': dates_train,
+                        'dates_test': dates_test
+                    }, os.path.join(model_dir, "training_data.pkl"))
+                    
+                    # Save history
+                    joblib.dump(history.history, os.path.join(model_dir, "history.pkl"))
+                    
+                    # Update session state
+                    st.session_state['model_dir'] = model_dir
+                    st.session_state['model_trained'] = True
+                    
+                    # Display success message
+                    st.markdown("<p class='success-text'>Model trained successfully!</p>", unsafe_allow_html=True)
+                    
+                    # Plot training history
+                    st.markdown("### Training History")
+                    fig, ax = plt.subplots(1, 2, figsize=(12, 5))
+                    
+                    # Plot loss
+                    ax[0].plot(history.history['loss'], label='Training Loss')
+                    if 'val_loss' in history.history:
+                        ax[0].plot(history.history['val_loss'], label='Validation Loss')
+                    ax[0].set_title('Model Loss')
+                    ax[0].set_xlabel('Epoch')
+                    ax[0].set_ylabel('Loss')
+                    ax[0].legend()
+                    ax[0].grid(True, alpha=0.3)
+                    
+                    # Plot learning rate if available
+                    if 'lr' in history.history:
+                        ax[1].plot(history.history['lr'], color='green')
+                        ax[1].set_title('Learning Rate')
+                        ax[1].set_xlabel('Epoch')
+                        ax[1].set_ylabel('Learning Rate')
+                        ax[1].grid(True, alpha=0.3)
+                    
+                    st.pyplot(fig)
+                except Exception as e:
+                    st.error(f"Error training model: {str(e)}")
     else:
         st.markdown("<p class='warning-text'>Please process data in the Data Processing tab first.</p>", unsafe_allow_html=True)
 
@@ -376,126 +382,188 @@ with tabs[1]:
 with tabs[2]:
     st.markdown("<h2 class='sub-header'>Model Evaluation</h2>", unsafe_allow_html=True)
     
+    # Upload trained model section
+    st.markdown("### Upload Trained Model")
+    uploaded_model_file = st.file_uploader("Upload H5 model file", type=["h5"])
+    uploaded_scalers_file = st.file_uploader("Upload scalers file (PKL)", type=["pkl"])
+
+    if uploaded_model_file is not None and uploaded_scalers_file is not None:
+        with st.spinner("Loading uploaded model..."):
+            # Save uploaded files
+            os.makedirs("models/uploaded", exist_ok=True)
+            model_path = os.path.join("models/uploaded", "model.h5")
+            scalers_path = os.path.join("models/uploaded", "scalers.pkl")
+            
+            with open(model_path, "wb") as f:
+                f.write(uploaded_model_file.getvalue())
+            
+            with open(scalers_path, "wb") as f:
+                f.write(uploaded_scalers_file.getvalue())
+            
+            # Load model
+            try:
+                # First try loading as a SavedModel
+                try:
+                    model = tf.keras.models.load_model(
+                        model_path, 
+                        custom_objects={'PINNModel': PINNModel, 'Attention': Attention}
+                    )
+                except:
+                    # If that fails, try loading as H5
+                    custom_objects = {'PINNModel': PINNModel, 'Attention': Attention}
+                    model = create_pinn_gru_model({'GRU_UNITS': gru_units, 
+                                                'DENSE_UNITS_1': dense_units_1,
+                                                'DENSE_UNITS_2': dense_units_2,
+                                                'DENSE_UNITS_3': dense_units_3,
+                                                'DROPOUT_RATE': dropout_rate,
+                                                'PHYSICS_LOSS_WEIGHT': physics_loss_weight})
+                    model.load_weights(model_path)
+                
+                # Load scalers
+                scalers = joblib.load(scalers_path)
+                
+                # Create model directory
+                model_dir = os.path.join("models", "uploaded_model")
+                os.makedirs(model_dir, exist_ok=True)
+                
+                # Save model in SavedModel format
+                model.save(os.path.join(model_dir, "model"))
+                
+                # Copy scalers
+                joblib.dump(scalers, os.path.join(model_dir, "scalers.pkl"))
+                
+                # Update session state
+                st.session_state['model_dir'] = model_dir
+                st.session_state['model_trained'] = True
+                
+                # Display success message
+                st.markdown("<p class='success-text'>Model uploaded and loaded successfully!</p>", unsafe_allow_html=True)
+            except Exception as e:
+                st.error(f"Error loading model: {str(e)}")
+    
     if st.session_state.get('model_trained', False):
         if st.button("Evaluate Model"):
             with st.spinner("Evaluating model..."):
-                # Load model and training data
-                model_dir = st.session_state['model_dir']
-                
-                # Load the entire model instead of just weights
-                model = tf.keras.models.load_model(
-                    os.path.join(model_dir, "model"), 
-                    custom_objects={'PINNModel': PINNModel, 'Attention': Attention}
-                )
-                
-                training_data = joblib.load(os.path.join(model_dir, "training_data.pkl"))
-                scalers = joblib.load(os.path.join(model_dir, "scalers.pkl"))
-                
-                # Evaluate model
-                metrics, visualizations = evaluate_model(
-                    model, 
-                    training_data['X_train'], 
-                    training_data['X_test'], 
-                    training_data['y_train'], 
-                    training_data['y_test'],
-                    training_data['dates_train'],
-                    training_data['dates_test'],
-                    scalers
-                )
-                
-                # Display metrics
-                st.markdown("### Performance Metrics")
-                
-                # Create columns for train and test metrics
-                col1, col2 = st.columns(2)
-                
-                with col1:
-                    st.markdown("#### Training Set")
-                    st.write(f"RMSE: {metrics['train_rmse']:.4f}")
-                    st.write(f"MAE: {metrics['train_mae']:.4f}")
-                    st.write(f"R²: {metrics['train_r2']:.4f}")
-                    st.write(f"NSE: {metrics['train_nse']:.4f}")
-                    st.write(f"KGE: {metrics['train_kge']:.4f}")
-                    st.write(f"PBIAS: {metrics['train_pbias']:.4f}%")
-                    st.write(f"High Flow Bias: {metrics['train_hf_bias']:.4f}%")
-                    st.write(f"Low Flow Bias: {metrics['train_lf_bias']:.4f}%")
-                
-                with col2:
-                    st.markdown("#### Testing Set")
-                    st.write(f"RMSE: {metrics['test_rmse']:.4f}")
-                    st.write(f"MAE: {metrics['test_mae']:.4f}")
-                    st.write(f"R²: {metrics['test_r2']:.4f}")
-                    st.write(f"NSE: {metrics['test_nse']:.4f}")
-                    st.write(f"KGE: {metrics['test_kge']:.4f}")
-                    st.write(f"PBIAS: {metrics['test_pbias']:.4f}%")
-                    st.write(f"High Flow Bias: {metrics['test_hf_bias']:.4f}%")
-                    st.write(f"Low Flow Bias: {metrics['test_lf_bias']:.4f}%")
-                
-                # Display visualizations
-                st.markdown("### Visualizations")
-                
-                # Hydrographs
-                st.markdown("#### Hydrographs")
-                st.pyplot(visualizations['train_hydrograph'])
-                st.pyplot(visualizations['test_hydrograph'])
-                
-                # Log scale hydrographs
-                st.markdown("#### Log Scale Hydrographs")
-                st.pyplot(visualizations['train_hydrograph_log'])
-                st.pyplot(visualizations['test_hydrograph_log'])
-                
-                # Scatter plots
-                st.markdown("#### Scatter Plots")
-                col1, col2 = st.columns(2)
-                with col1:
-                    st.pyplot(visualizations['train_scatter'])
-                with col2:
-                    st.pyplot(visualizations['test_scatter'])
-                
-                # Flow duration curves
-                st.markdown("#### Flow Duration Curves")
-                col1, col2 = st.columns(2)
-                with col1:
-                    st.pyplot(visualizations['train_fdc'])
-                with col2:
-                    st.pyplot(visualizations['test_fdc'])
-                
-                # Residual plots
-                st.markdown("#### Residual Analysis")
-                col1, col2 = st.columns(2)
-                with col1:
-                    st.pyplot(visualizations['train_residuals'])
-                with col2:
-                    st.pyplot(visualizations['test_residuals'])
-                
-                # Event analysis if available
-                if 'test_events' in visualizations:
-                    st.markdown("#### Event Analysis")
-                    st.pyplot(visualizations['test_events'])
-                
-                # Save evaluation results
-                st.markdown("### Download Results")
-                
-                # Save metrics to CSV
-                metrics_df = pd.DataFrame({
-                    'Metric': ['RMSE', 'MAE', 'R2', 'NSE', 'KGE', 'PBIAS', 'HF_Bias', 'LF_Bias'],
-                    'Training': [metrics['train_rmse'], metrics['train_mae'], metrics['train_r2'], 
-                                metrics['train_nse'], metrics['train_kge'], metrics['train_pbias'], 
-                                metrics['train_hf_bias'], metrics['train_lf_bias']],
-                    'Testing': [metrics['test_rmse'], metrics['test_mae'], metrics['test_r2'], 
-                               metrics['test_nse'], metrics['test_kge'], metrics['test_pbias'], 
-                               metrics['test_hf_bias'], metrics['test_lf_bias']]
-                })
-                
-                metrics_csv = metrics_df.to_csv(index=False)
-                st.download_button(
-                    label="Download Metrics CSV",
-                    data=metrics_csv,
-                    file_name="model_metrics.csv",
-                    mime="text/csv"
-                )
+                try:
+                    # Load model and training data
+                    model_dir = st.session_state['model_dir']
+                    
+                    # Load the entire model instead of just weights
+                    model = tf.keras.models.load_model(
+                        os.path.join(model_dir, "model"), 
+                        custom_objects={'PINNModel': PINNModel, 'Attention': Attention}
+                    )
+                    
+                    training_data = joblib.load(os.path.join(model_dir, "training_data.pkl"))
+                    scalers = joblib.load(os.path.join(model_dir, "scalers.pkl"))
+                    
+                    # Evaluate model
+                    metrics, visualizations = evaluate_model(
+                        model, 
+                        training_data['X_train'], 
+                        training_data['X_test'], 
+                        training_data['y_train'], 
+                        training_data['y_test'],
+                        training_data['dates_train'],
+                        training_data['dates_test'],
+                        scalers
+                    )
+                    
+                    # Display metrics
+                    st.markdown("### Performance Metrics")
+                    
+                    # Create columns for train and test metrics
+                    col1, col2 = st.columns(2)
+                    
+                    with col1:
+                        st.markdown("#### Training Set")
+                        st.write(f"RMSE: {metrics['train_rmse']:.4f}")
+                        st.write(f"MAE: {metrics['train_mae']:.4f}")
+                        st.write(f"R²: {metrics['train_r2']:.4f}")
+                        st.write(f"NSE: {metrics['train_nse']:.4f}")
+                        st.write(f"KGE: {metrics['train_kge']:.4f}")
+                        st.write(f"PBIAS: {metrics['train_pbias']:.4f}%")
+                        st.write(f"High Flow Bias: {metrics['train_hf_bias']:.4f}%")
+                        st.write(f"Low Flow Bias: {metrics['train_lf_bias']:.4f}%")
+                    
+                    with col2:
+                        st.markdown("#### Testing Set")
+                        st.write(f"RMSE: {metrics['test_rmse']:.4f}")
+                        st.write(f"MAE: {metrics['test_mae']:.4f}")
+                        st.write(f"R²: {metrics['test_r2']:.4f}")
+                        st.write(f"NSE: {metrics['test_nse']:.4f}")
+                        st.write(f"KGE: {metrics['test_kge']:.4f}")
+                        st.write(f"PBIAS: {metrics['test_pbias']:.4f}%")
+                        st.write(f"High Flow Bias: {metrics['test_hf_bias']:.4f}%")
+                        st.write(f"Low Flow Bias: {metrics['test_lf_bias']:.4f}%")
+                    
+                    # Display visualizations
+                    st.markdown("### Visualizations")
+                    
+                    # Hydrographs
+                    st.markdown("#### Hydrographs")
+                    st.pyplot(visualizations['train_hydrograph'])
+                    st.pyplot(visualizations['test_hydrograph'])
+                    
+                    # Log scale hydrographs
+                    st.markdown("#### Log Scale Hydrographs")
+                    st.pyplot(visualizations['train_hydrograph_log'])
+                    st.pyplot(visualizations['test_hydrograph_log'])
+                    
+                    # Scatter plots
+                    st.markdown("#### Scatter Plots")
+                    col1, col2 = st.columns(2)
+                    with col1:
+                        st.pyplot(visualizations['train_scatter'])
+                    with col2:
+                        st.pyplot(visualizations['test_scatter'])
+                    
+                    # Flow duration curves
+                    st.markdown("#### Flow Duration Curves")
+                    col1, col2 = st.columns(2)
+                    with col1:
+                        st.pyplot(visualizations['train_fdc'])
+                    with col2:
+                        st.pyplot(visualizations['test_fdc'])
+                    
+                    # Residual plots
+                    st.markdown("#### Residual Analysis")
+                    col1, col2 = st.columns(2)
+                    with col1:
+                        st.pyplot(visualizations['train_residuals'])
+                    with col2:
+                        st.pyplot(visualizations['test_residuals'])
+                    
+                    # Event analysis if available
+                    if 'test_events' in visualizations:
+                        st.markdown("#### Event Analysis")
+                        st.pyplot(visualizations['test_events'])
+                    
+                    # Save evaluation results
+                    st.markdown("### Download Results")
+                    
+                    # Save metrics to CSV
+                    metrics_df = pd.DataFrame({
+                        'Metric': ['RMSE', 'MAE', 'R2', 'NSE', 'KGE', 'PBIAS', 'HF_Bias', 'LF_Bias'],
+                        'Training': [metrics['train_rmse'], metrics['train_mae'], metrics['train_r2'], 
+                                    metrics['train_nse'], metrics['train_kge'], metrics['train_pbias'], 
+                                    metrics['train_hf_bias'], metrics['train_lf_bias']],
+                        'Testing': [metrics['test_rmse'], metrics['test_mae'], metrics['test_r2'], 
+                                metrics['test_nse'], metrics['test_kge'], metrics['test_pbias'], 
+                                metrics['test_hf_bias'], metrics['test_lf_bias']]
+                    })
+                    
+                    metrics_csv = metrics_df.to_csv(index=False)
+                    st.download_button(
+                        label="Download Metrics CSV",
+                        data=metrics_csv,
+                        file_name="model_metrics.csv",
+                        mime="text/csv"
+                    )
+                except Exception as e:
+                    st.error(f"Error evaluating model: {str(e)}")
     elif st.session_state.get('data_processed', False):
-        st.markdown("<p class='warning-text'>Please train a model in the Model Training tab first.</p>", unsafe_allow_html=True)
+        st.markdown("<p class='warning-text'>Please train a model in the Model Training tab first or upload a pre-trained model.</p>", unsafe_allow_html=True)
     else:
         st.markdown("<p class='warning-text'>Please process data in the Data Processing tab first.</p>", unsafe_allow_html=True)
     
@@ -541,60 +609,63 @@ with tabs[3]:
         
         if st.button("Generate Predictions"):
             with st.spinner("Generating predictions for ungauged catchment..."):
-                # Load model and related objects
-                model_dir = st.session_state['model_dir']
-                
-                # Load the entire model instead of just weights
-                model = tf.keras.models.load_model(
-                    os.path.join(model_dir, "model"), 
-                    custom_objects={'PINNModel': PINNModel, 'Attention': Attention}
-                )
-                
-                scalers = joblib.load(os.path.join(model_dir, "scalers.pkl"))
-                model_params = joblib.load(os.path.join(model_dir, "model_params.pkl"))
-                
-                # Generate predictions
-                predictions, dates, visualizations = predict_ungauged(
-                    model,
-                    st.session_state['gauged_data_path'],
-                    st.session_state['ungauged_data_path'],
-                    scalers,
-                    model_params
-                )
-                
-                # Display predictions
-                st.markdown("### Prediction Results")
-                
-                # Create DataFrame with predictions
-                predictions_df = pd.DataFrame({
-                    'Date': dates,
-                    'Predicted Streamflow (m³/s)': predictions
-                })
-                
-                # Display predictions table
-                st.dataframe(predictions_df)
-                
-                # Display visualizations
-                st.markdown("### Visualizations")
-                
-                # Predicted streamflow
-                st.markdown("#### Predicted Streamflow")
-                st.pyplot(visualizations['ungauged_predicted'])
-                
-                # Flow duration curve
-                st.markdown("#### Flow Duration Curve")
-                st.pyplot(visualizations['ungauged_predicted_fdc'])
-                
-                # Save predictions to CSV
-                predictions_csv = predictions_df.to_csv(index=False)
-                st.download_button(
-                    label="Download Predictions CSV",
-                    data=predictions_csv,
-                    file_name="ungauged_predictions.csv",
-                    mime="text/csv"
-                )
+                try:
+                    # Load model and related objects
+                    model_dir = st.session_state['model_dir']
+                    
+                    # Load the entire model instead of just weights
+                    model = tf.keras.models.load_model(
+                        os.path.join(model_dir, "model"), 
+                        custom_objects={'PINNModel': PINNModel, 'Attention': Attention}
+                    )
+                    
+                    scalers = joblib.load(os.path.join(model_dir, "scalers.pkl"))
+                    model_params = joblib.load(os.path.join(model_dir, "model_params.pkl"))
+                    
+                    # Generate predictions
+                    predictions, dates, visualizations = predict_ungauged(
+                        model,
+                        st.session_state['gauged_data_path'],
+                        st.session_state['ungauged_data_path'],
+                        scalers,
+                        model_params
+                    )
+                    
+                    # Display predictions
+                    st.markdown("### Prediction Results")
+                    
+                    # Create DataFrame with predictions
+                    predictions_df = pd.DataFrame({
+                        'Date': dates,
+                        'Predicted Streamflow (m³/s)': predictions
+                    })
+                    
+                    # Display predictions table
+                    st.dataframe(predictions_df)
+                    
+                    # Display visualizations
+                    st.markdown("### Visualizations")
+                    
+                    # Predicted streamflow
+                    st.markdown("#### Predicted Streamflow")
+                    st.pyplot(visualizations['ungauged_predicted'])
+                    
+                    # Flow duration curve
+                    st.markdown("#### Flow Duration Curve")
+                    st.pyplot(visualizations['ungauged_predicted_fdc'])
+                    
+                    # Save predictions to CSV
+                    predictions_csv = predictions_df.to_csv(index=False)
+                    st.download_button(
+                        label="Download Predictions CSV",
+                        data=predictions_csv,
+                        file_name="ungauged_predictions.csv",
+                        mime="text/csv"
+                    )
+                except Exception as e:
+                    st.error(f"Error generating predictions: {str(e)}")
     elif not st.session_state.get('model_trained', False):
-        st.markdown("<p class='warning-text'>Please train a model in the Model Training tab first.</p>", unsafe_allow_html=True)
+        st.markdown("<p class='warning-text'>Please train a model in the Model Training tab first or upload a pre-trained model.</p>", unsafe_allow_html=True)
     elif st.session_state.get('ungauged_data_path', None) is None:
         st.markdown("<p class='warning-text'>Please upload ungauged catchment data in the Data Processing tab.</p>", unsafe_allow_html=True)
         
