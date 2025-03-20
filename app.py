@@ -83,7 +83,7 @@ with st.sidebar:
     st.markdown("### Training Parameters")
     learning_rate = st.number_input("Learning Rate", min_value=0.00001, max_value=0.01, value=0.0001, format="%.5f")
     batch_size = st.number_input("Batch Size", min_value=8, max_value=128, value=32, step=8)
-    epochs = st.number_input("Epochs", min_value=10, max_value=1000, value=500, step=10)
+    epochs = st.number_input("Epochs", min_value=1, max_value=1000, value=500, step=1)
     physics_loss_weight = st.slider("Physics Loss Weight", min_value=0.0, max_value=1.0, value=0.1, step=0.1)
     
     # Data parameters section
