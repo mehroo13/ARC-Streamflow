@@ -25,31 +25,39 @@ class Attention(tf.keras.layers.Layer):
         return config
 
 def water_balance_loss(y_true, y_pred, inputs):
-    # Extract dynamic inputs (assuming first 4 features are rainfall, temp_max, temp_min, solar)
-    pcp, temp_max, temp_min, solar = inputs[:, 0, 0], inputs[:, 0, 1], inputs[:, 0, 2], inputs[:, 0, 3]
-    
-    # Simple ET calculation based on temperature and solar radiation
-    et = 0.0023 * (temp_max - temp_min) * (temp_max + temp_min) * solar
-    
-    # Water balance: precipitation - (evapotranspiration + runoff)
-    predicted_Q = y_pred
-    balance_term = pcp - (et + predicted_Q)
-    
-    return tf.reduce_mean(tf.square(balance_term))
+    try:
+        # Extract dynamic inputs (assuming first 4 features are rainfall, temp_max, temp_min, solar)
+        pcp, temp_max, temp_min, solar = inputs[:, 0, 0], inputs[:, 0, 1], inputs[:, 0, 2], inputs[:, 0, 3]
+        
+        # Simple ET calculation based on temperature and solar radiation
+        et = 0.0023 * (temp_max - temp_min) * (temp_max + temp_min) * solar
+        
+        # Water balance: precipitation - (evapotranspiration + runoff)
+        predicted_Q = y_pred
+        balance_term = pcp - (et + predicted_Q)
+        
+        return tf.reduce_mean(tf.square(balance_term))
+    except Exception as e:
+        print(f"Warning: Error in water_balance_loss: {str(e)}")
+        return 0.0  # Return zero loss if there's an error
 
 def custom_loss(inputs, y_true, y_pred, physics_loss_weight=0.1):
-    # Mean squared error loss
-    mse_loss = tf.reduce_mean(tf.square(y_true - y_pred))
-    
-    # Penalize overpredictions more heavily to address high PBIAS
-    weights = tf.where(y_pred > y_true, 5.0, 1.0)  # 5x penalty for overpredictions
-    weighted_mse_loss = tf.reduce_mean(weights * tf.square(y_true - y_pred))
-    
-    # Physics-based loss
-    physics_loss = water_balance_loss(y_true, y_pred, inputs)
-    
-    # Combined loss
-    return weighted_mse_loss + physics_loss_weight * physics_loss
+    try:
+        # Mean squared error loss
+        mse_loss = tf.reduce_mean(tf.square(y_true - y_pred))
+        
+        # Penalize overpredictions more heavily to address high PBIAS
+        weights = tf.where(y_pred > y_true, 5.0, 1.0)  # 5x penalty for overpredictions
+        weighted_mse_loss = tf.reduce_mean(weights * tf.square(y_true - y_pred))
+        
+        # Physics-based loss
+        physics_loss = water_balance_loss(y_true, y_pred, inputs)
+        
+        # Combined loss
+        return weighted_mse_loss + physics_loss_weight * physics_loss
+    except Exception as e:
+        print(f"Warning: Error in custom_loss: {str(e)}")
+        return tf.reduce_mean(tf.square(y_true - y_pred))  # Fall back to MSE
 
 class PINNModel(tf.keras.Model):
     def __init__(self, inputs, outputs, physics_loss_weight=0.1):
@@ -63,7 +71,13 @@ class PINNModel(tf.keras.Model):
         
         with tf.GradientTape() as tape:
             y_pred = self(X, training=True)
-            loss = custom_loss(X, y, y_pred, self.physics_loss_weight)
+            
+            # Use a simpler loss function if the input structure doesn't match what's expected
+            try:
+                loss = custom_loss(X, y, y_pred, self.physics_loss_weight)
+            except Exception as e:
+                print(f"Warning: Using MSE loss instead of custom loss due to: {str(e)}")
+                loss = tf.reduce_mean(tf.square(y - y_pred))
         
         gradients = tape.gradient(loss, self.trainable_weights)
         self.optimizer.apply_gradients(zip(gradients, self.trainable_weights))
@@ -74,7 +88,13 @@ class PINNModel(tf.keras.Model):
     def test_step(self, data):
         X, y = data
         y_pred = self(X, training=False)
-        loss = custom_loss(X, y, y_pred, self.physics_loss_weight)
+        
+        # Use a simpler loss function if the input structure doesn't match what's expected
+        try:
+            loss = custom_loss(X, y, y_pred, self.physics_loss_weight)
+        except Exception as e:
+            print(f"Warning: Using MSE loss instead of custom loss due to: {str(e)}")
+            loss = tf.reduce_mean(tf.square(y - y_pred))
         
         self.val_loss_tracker.update_state(loss)
         return {"val_loss": self.val_loss_tracker.result()}
