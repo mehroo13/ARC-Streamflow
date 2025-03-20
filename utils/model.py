@@ -1,5 +1,6 @@
 import tensorflow as tf
 import numpy as np
+import os  # Added to resolve NameError
 from tensorflow.keras.callbacks import Callback
 
 class Attention(tf.keras.layers.Layer):
