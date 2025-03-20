@@ -12,9 +12,10 @@ sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
 # Import utility modules
 from utils.data_processing import load_data, preprocess_data
-from utils.model import create_pinn_gru_model, train_model
+from utils.model import create_pinn_gru_model, train_model, PINNModel, Attention
 from utils.evaluation import evaluate_model, generate_visualizations
 from utils.prediction import predict_ungauged
+import tensorflow as tf
 
 # Set page configuration
 st.set_page_config(
@@ -319,7 +320,9 @@ with tabs[1]:
                 model_dir = os.path.join("models", "model_" + timestamp)
                 os.makedirs(model_dir, exist_ok=True)
                 
-                model.save(os.path.join(model_dir, "model.h5"))
+                # Save model using SavedModel format instead of H5
+                model.save(os.path.join(model_dir, "model"))
+                
                 joblib.dump(scalers, os.path.join(model_dir, "scalers.pkl"))
                 joblib.dump(model_params, os.path.join(model_dir, "model_params.pkl"))
                 
@@ -378,8 +381,12 @@ with tabs[2]:
             with st.spinner("Evaluating model..."):
                 # Load model and training data
                 model_dir = st.session_state['model_dir']
-                model = create_pinn_gru_model(joblib.load(os.path.join(model_dir, "model_params.pkl")))
-                model.load_weights(os.path.join(model_dir, "model.h5"))
+                
+                # Load the entire model instead of just weights
+                model = tf.keras.models.load_model(
+                    os.path.join(model_dir, "model"), 
+                    custom_objects={'PINNModel': PINNModel, 'Attention': Attention}
+                )
                 
                 training_data = joblib.load(os.path.join(model_dir, "training_data.pkl"))
                 scalers = joblib.load(os.path.join(model_dir, "scalers.pkl"))
@@ -536,8 +543,12 @@ with tabs[3]:
             with st.spinner("Generating predictions for ungauged catchment..."):
                 # Load model and related objects
                 model_dir = st.session_state['model_dir']
-                model = create_pinn_gru_model(joblib.load(os.path.join(model_dir, "model_params.pkl")))
-                model.load_weights(os.path.join(model_dir, "model.h5"))
+                
+                # Load the entire model instead of just weights
+                model = tf.keras.models.load_model(
+                    os.path.join(model_dir, "model"), 
+                    custom_objects={'PINNModel': PINNModel, 'Attention': Attention}
+                )
                 
                 scalers = joblib.load(os.path.join(model_dir, "scalers.pkl"))
                 model_params = joblib.load(os.path.join(model_dir, "model_params.pkl"))
