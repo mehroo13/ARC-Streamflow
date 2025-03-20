@@ -11,10 +11,10 @@ from datetime import datetime
 sys.path.append(os.path.join(os.path.dirname(__file__), 'utils'))
 
 # Import utility modules
-from data_processing import load_data, preprocess_data
-from model import create_pinn_gru_model, train_model
-from evaluation import evaluate_model, generate_visualizations
-from prediction import predict_ungauged
+from utils.data_processing import load_data, preprocess_data
+from utils.model import create_pinn_gru_model, train_model
+from utils.evaluation import evaluate_model, generate_visualizations
+from utils.prediction import predict_ungauged
 
 # Set page configuration
 st.set_page_config(
@@ -355,4 +355,4 @@ with tabs[2]:
                 # Save evaluation results
                 st.markdown("### Download Results")
                 
-                # Save metrics<response clipped><NOTE>To save on context only part of this file has been shown to you. You should retry this tool after you have searched inside the file with `grep -n` in order to find the line numbers of what you are looking for.</NOTE>
+      <response clipped><NOTE>To save on context only part of this file has been shown to you. You should retry this tool after you have searched inside the file with `grep -n` in order to find the line numbers of what you are looking for.</NOTE>
