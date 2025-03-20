@@ -110,11 +110,11 @@ class PINNModel(tf.keras.Model):
 
 def create_pinn_gru_model(params):
     # Get parameters
-    gru_units = params['GRU_UNITS']
-    dense_units_1 = params['DENSE_UNITS_1']
-    dense_units_2 = params['DENSE_UNITS_2']
-    dense_units_3 = params['DENSE_UNITS_3']
-    dropout_rate = params['DROPOUT_RATE']
+    gru_units = params.get('GRU_UNITS', 128)
+    dense_units_1 = params.get('DENSE_UNITS_1', 256)
+    dense_units_2 = params.get('DENSE_UNITS_2', 512)
+    dense_units_3 = params.get('DENSE_UNITS_3', 256)
+    dropout_rate = params.get('DROPOUT_RATE', 0.4)
     physics_loss_weight = params.get('PHYSICS_LOSS_WEIGHT', 0.1)
     
     # Define input shape explicitly - this is the key fix
@@ -139,16 +139,26 @@ def create_pinn_gru_model(params):
 def train_model(data_path, model_params, progress_callback=None):
     from utils.data_processing import preprocess_data
     
+    # Check if data path exists
+    if not os.path.exists(data_path):
+        print(f"Error: Data file not found at {data_path}")
+        return None, None, None, None, None, None, None, None, None
+    
     # Preprocess data
     X_train, X_test, y_train, y_test, dates_train, dates_test, scalers = preprocess_data(
         data_path, 
-        model_params['NUM_LAGGED_FEATURES'], 
-        model_params['TRAIN_TEST_SPLIT'],
-        model_params['OUTPUT_VARIABLE'],
-        model_params['DYNAMIC_VARIABLES'],
-        model_params['CATEGORICAL_VARIABLES'],
-        model_params['NUMERIC_STATIC_VARIABLES']
+        model_params.get('NUM_LAGGED_FEATURES', 12), 
+        model_params.get('TRAIN_TEST_SPLIT', 0.8),
+        model_params.get('OUTPUT_VARIABLE', 'Discharge (m³/S)'),
+        model_params.get('DYNAMIC_VARIABLES', None),
+        model_params.get('CATEGORICAL_VARIABLES', None),
+        model_params.get('NUMERIC_STATIC_VARIABLES', None)
     )
+    
+    # Check if preprocessing was successful
+    if X_train is None or X_test is None or y_train is None or y_test is None or dates_train is None or dates_test is None or scalers is None:
+        print("Error: Data preprocessing failed")
+        return None, None, None, None, None, None, None, None, None
     
     # Store input shape in model parameters
     model_params['INPUT_SHAPE'] = X_train.shape[2]
@@ -158,7 +168,7 @@ def train_model(data_path, model_params, progress_callback=None):
     
     # Compile model
     model.compile(
-        optimizer=tf.keras.optimizers.Adam(learning_rate=model_params['LEARNING_RATE']),
+        optimizer=tf.keras.optimizers.Adam(learning_rate=model_params.get('LEARNING_RATE', 0.0001)),
         loss='mae',  # This is just a placeholder, the actual loss is defined in the model
         run_eagerly=True  # Required for custom loss function
     )
@@ -192,17 +202,23 @@ def train_model(data_path, model_params, progress_callback=None):
     if progress_callback:
         class ProgressCallback(Callback):
             def on_epoch_end(self, epoch, logs=None):
+                if logs is None:
+                    logs = {}
                 progress_callback(epoch, logs)
         callbacks.append(ProgressCallback())
     
     # Train model
-    history = model.fit(
-        X_train, y_train,
-        epochs=model_params['EPOCHS'],
-        batch_size=model_params['BATCH_SIZE'],
-        validation_data=(X_test, y_test),
-        verbose=1,
-        callbacks=callbacks
-    )
+    try:
+        history = model.fit(
+            X_train, y_train,
+            epochs=model_params.get('EPOCHS', 500),
+            batch_size=model_params.get('BATCH_SIZE', 32),
+            validation_data=(X_test, y_test),
+            verbose=1,
+            callbacks=callbacks
+        )
+    except Exception as e:
+        print(f"Error during model training: {str(e)}")
+        return None, None, None, None, None, None, None, None, None
     
     return model, history, X_train, X_test, y_train, y_test, dates_train, dates_test, scalers
