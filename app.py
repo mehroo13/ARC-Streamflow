@@ -147,17 +147,16 @@ with tab2:
                     progress_callback=update_progress
                 )
                 
-                # Check if training was successful before proceeding
+                # Save model artifacts only if model is not None
                 if model is not None:
                     st.session_state.model = model
                     st.session_state.scalers = scalers
                     
-                    # Save model artifacts
                     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
                     output_dir = f"models/model_{timestamp}"
                     os.makedirs(output_dir, exist_ok=True)
-                    model.save(os.path.join(output_dir, "model"))  # SavedModel format
-                    model.save(os.path.join(output_dir, "model.h5"))  # H5 format
+                    model.save(os.path.join(output_dir, "model"))
+                    model.save(os.path.join(output_dir, "model.h5"))
                     
                     training_data = {
                         'X_train': X_train, 'X_test': X_test, 'y_train': y_train, 'y_test': y_test,
@@ -189,8 +188,6 @@ with tab2:
                         ax2.grid(True, alpha=0.3)
                     
                     st.pyplot(fig)
-                else:
-                    st.error("Model training failed. Check the data or parameters.")
             except Exception as e:
                 st.error(f"Error training model: {str(e)}")
 
