@@ -117,13 +117,23 @@ def preprocess_data(data_path, num_lagged_features=12, train_test_split=0.8,
     
     # Process categorical variables
     X_static_categorical = pd.DataFrame()
-    if categorical_variables:
-        X_static_categorical = pd.get_dummies(data[categorical_variables], columns=categorical_variables, drop_first=True)
+    if categorical_variables and len(categorical_variables) > 0:
+        try:
+            X_static_categorical = pd.get_dummies(data[categorical_variables], columns=categorical_variables, drop_first=True)
+        except Exception as e:
+            print(f"Warning: Error processing categorical variables: {str(e)}")
+            # Create empty DataFrame with same number of rows
+            X_static_categorical = pd.DataFrame(index=range(len(data)))
     
     # Process numeric static variables
     X_static_numeric = np.zeros((data.shape[0], 1))
-    if numeric_static_variables:
-        X_static_numeric = data[numeric_static_variables].values
+    if numeric_static_variables and len(numeric_static_variables) > 0:
+        try:
+            X_static_numeric = data[numeric_static_variables].values
+        except Exception as e:
+            print(f"Warning: Error processing numeric static variables: {str(e)}")
+            # Create empty array with same number of rows
+            X_static_numeric = np.zeros((data.shape[0], 1))
     
     # Extract dynamic features and target
     X_dynamic = data[all_dynamic_cols].values
